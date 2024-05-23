@@ -43,17 +43,32 @@ func handleClient(conn net.Conn) {
 	req := string(buf[:n])
 	path := strings.Split(req, " ")[1]
 
-	fmt.Println(path)
+	// build headers map from request
+	headersRaw := strings.Split(strings.SplitN(req, "\r\n", 2)[1], "\r\n\r\n")[0]
+	headers := make(map[string]string)
+	for _, h := range strings.Split(headersRaw, "\r\n") {
+		k, v, _ := strings.Cut(h, ": ")
+		headers[k] = v
+	}
+
+	// for k, v := range headers {
+	// 	fmt.Printf("%s:%s.\n", k, v)
+	// }
 
 	// handle URL target
-	status := "404 Not Found"
+	status := "200 OK"
 	body := ""
 	switch {
 	case path == "/":
-		status = "200 OK"
+		break
+	case path == "/user-agent":
+		if ua, ok := headers["User-Agent"]; ok {
+			body = ua
+		}
 	case strings.HasPrefix(path, "/echo/"):
 		body = path[6:]
-		status = "200 OK"
+	default:
+		status = "404 Not Found"
 	}
 
 	// write response
@@ -70,7 +85,7 @@ func handleClient(conn net.Conn) {
 	}
 }
 
-// writePlain writes an HTTP response with the plain text s as body.
+// writePlain writes a byte buffer with body as plain text.
 func formatPlain(body string) []byte {
 	statusLine := "HTTP/1.1 200 OK\r\n"
 	headers := fmt.Sprintf(
