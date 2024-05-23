@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"strings"
 )
 
 func main() {
@@ -36,7 +37,22 @@ func main() {
 func handleClient(conn net.Conn) {
 	defer conn.Close()
 
-	buf := []byte("HTTP/1.1 200 OK\r\n\r\n")
+	// parse request and get url target
+	buf := make([]byte, 1024)
+	_, err := conn.Read(buf)
+	if err != nil {
+		log.Println("error reading HTTP request: ", err)
+	}
+
+	reqRaw := string(buf)
+	path := strings.Split(reqRaw, " ")[1]
+
+	status := "404 Not Found"
+	if path == "/" {
+		status = "200 OK"
+	}
+
+	buf = []byte(fmt.Sprintf("HTTP/1.1 %s\r\n\r\n", status))
 	n, err := conn.Write(buf)
 	if err != nil {
 		log.Println("Error writing to connection: ", err)
