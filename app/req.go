@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"strings"
 )
 
@@ -37,10 +36,6 @@ func parseRequest(buf []byte) *request {
 
 	// body
 	req.body = strings.Split(reqRaw, "\r\n\r\n")[1]
-
-	fmt.Println(req.method, req.path)
-	fmt.Println(req.headers)
-	fmt.Println(req.body)
 
 	return req
 }

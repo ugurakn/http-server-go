@@ -11,8 +11,10 @@ import (
 const (
 	HTTP_version = "HTTP/1.1"
 
-	status_200_OK        = "200 OK"
-	status_404_Not_Found = "404 Not Found"
+	status_200_OK                    = "200 OK"
+	status_201_Created               = "201 Created"
+	status_404_Not_Found             = "404 Not Found"
+	status_500_Internal_Server_Error = "500 Internal Server Error"
 )
 
 func main() {
@@ -54,31 +56,49 @@ func handle(conn net.Conn) {
 	status := status_200_OK
 	bodyStr := ""
 	bodyByt := make([]byte, 0)
-	switch {
-	case req.path == "/":
-		break
 
-	case strings.HasPrefix(req.path, "/files/"):
-		directory := os.Args[2]
-		filename := req.path[len("/files"):]
-		b, err := os.ReadFile(directory + filename)
-		if err != nil {
-			log.Printf("can't read %s%s: %v\n", directory, filename, err)
-			status = status_404_Not_Found
+	switch req.method {
+	case "GET":
+		switch {
+		case req.path == "/":
 			break
+
+		case strings.HasPrefix(req.path, "/files/"):
+			directory := os.Args[2]
+			filename := req.path[len("/files"):]
+			b, err := os.ReadFile(directory + filename)
+			if err != nil {
+				log.Printf("can't read %s%s: %v\n", directory, filename, err)
+				status = status_404_Not_Found
+				break
+			}
+			bodyByt = b
+
+		case req.path == "/user-agent":
+			if ua, ok := req.headers["User-Agent"]; ok {
+				bodyStr = ua
+			}
+
+		case strings.HasPrefix(req.path, "/echo/"):
+			bodyStr = req.path[6:]
+
+		default:
+			status = status_404_Not_Found
 		}
-		bodyByt = b
-
-	case req.path == "/user-agent":
-		if ua, ok := req.headers["User-Agent"]; ok {
-			bodyStr = ua
+	case "POST":
+		switch {
+		case strings.HasPrefix(req.path, "/files/"):
+			directory := os.Args[2]
+			filename := req.path[len("/files"):]
+			err := os.WriteFile(directory+filename, []byte(req.body), 0644)
+			if err != nil {
+				log.Printf("can't write to %s%s: %v\n", directory, filename, err)
+				status = status_500_Internal_Server_Error
+				break
+			}
+			status = status_201_Created
 		}
 
-	case strings.HasPrefix(req.path, "/echo/"):
-		bodyStr = req.path[6:]
-
-	default:
-		status = status_404_Not_Found
 	}
 
 	// write response
