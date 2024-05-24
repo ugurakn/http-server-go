@@ -61,16 +61,31 @@ func handle(conn net.Conn) {
 
 	// handle URL target
 	status := status_200_OK
-	body := ""
+	bodyStr := ""
+	bodyByt := make([]byte, 0)
 	switch {
 	case path == "/":
 		break
+
+	case strings.HasPrefix(path, "/files/"):
+		directory := os.Args[2]
+		filename := path[len("/files"):]
+		b, err := os.ReadFile(directory + filename)
+		if err != nil {
+			log.Printf("can't read %s%s: %v\n", directory, filename, err)
+			status = status_404_Not_Found
+			break
+		}
+		bodyByt = b
+
 	case path == "/user-agent":
 		if ua, ok := headers["User-Agent"]; ok {
-			body = ua
+			bodyStr = ua
 		}
+
 	case strings.HasPrefix(path, "/echo/"):
-		body = path[6:]
+		bodyStr = path[6:]
+
 	default:
 		status = status_404_Not_Found
 	}
@@ -78,8 +93,10 @@ func handle(conn net.Conn) {
 	// write response
 	buf = []byte(fmt.Sprintf("%s %s\r\n\r\n", HTTP_version, status))
 
-	if body != "" {
-		buf = formatPlain(body)
+	if bodyStr != "" {
+		buf = formatPlain(bodyStr)
+	} else if len(bodyByt) != 0 {
+		buf = formatOctet(bodyByt)
 	}
 
 	_, err = conn.Write(buf)
@@ -97,4 +114,13 @@ func formatPlain(body string) []byte {
 		len(body),
 	)
 	return []byte(statusLine + headers + body)
+}
+
+func formatOctet(body []byte) []byte {
+	statusLine := fmt.Sprintf("%s %s\r\n", HTTP_version, status_200_OK)
+	headers := fmt.Sprintf(
+		"Content-Type: application/octet-stream\r\nContent-Length: %v\r\n\r\n",
+		len(body),
+	)
+	return append([]byte(statusLine+headers), body...)
 }
