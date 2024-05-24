@@ -38,38 +38,29 @@ func main() {
 func handle(conn net.Conn) {
 	defer conn.Close()
 
-	// parse request and get URL target
+	// read request into buffer
 	buf := make([]byte, 1024)
 	n, err := conn.Read(buf)
 	if err != nil {
 		log.Println("Error reading HTTP request: ", err)
+		// TODO handle: respond with 500 error
 		return
 	}
 
-	// extract URL path from request
-	req := string(buf[:n])
-	path := strings.Split(req, " ")[1]
-
-	// build headers map from request (ugly :( )
-	headersRaw := strings.Split(strings.SplitN(req, "\r\n", 2)[1], "\r\n\r\n")[0]
-
-	headers := make(map[string]string)
-	for _, h := range strings.Split(headersRaw, "\r\n") {
-		k, v, _ := strings.Cut(h, ": ")
-		headers[k] = v
-	}
+	// parse request
+	req := parseRequest(buf[:n])
 
 	// handle URL target
 	status := status_200_OK
 	bodyStr := ""
 	bodyByt := make([]byte, 0)
 	switch {
-	case path == "/":
+	case req.path == "/":
 		break
 
-	case strings.HasPrefix(path, "/files/"):
+	case strings.HasPrefix(req.path, "/files/"):
 		directory := os.Args[2]
-		filename := path[len("/files"):]
+		filename := req.path[len("/files"):]
 		b, err := os.ReadFile(directory + filename)
 		if err != nil {
 			log.Printf("can't read %s%s: %v\n", directory, filename, err)
@@ -78,13 +69,13 @@ func handle(conn net.Conn) {
 		}
 		bodyByt = b
 
-	case path == "/user-agent":
-		if ua, ok := headers["User-Agent"]; ok {
+	case req.path == "/user-agent":
+		if ua, ok := req.headers["User-Agent"]; ok {
 			bodyStr = ua
 		}
 
-	case strings.HasPrefix(path, "/echo/"):
-		bodyStr = path[6:]
+	case strings.HasPrefix(req.path, "/echo/"):
+		bodyStr = req.path[6:]
 
 	default:
 		status = status_404_Not_Found
