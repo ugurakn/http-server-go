@@ -8,6 +8,13 @@ import (
 	"strings"
 )
 
+const (
+	HTTP_version = "HTTP/1.1"
+
+	status_200_OK        = "200 OK"
+	status_404_Not_Found = "404 Not Found"
+)
+
 func main() {
 	l, err := net.Listen("tcp", "localhost:4221")
 	fmt.Println(l.Addr())
@@ -24,18 +31,18 @@ func main() {
 			continue
 		}
 
-		handleClient(conn)
+		go handle(conn)
 	}
 }
 
-func handleClient(conn net.Conn) {
+func handle(conn net.Conn) {
 	defer conn.Close()
 
 	// parse request and get URL target
 	buf := make([]byte, 1024)
 	n, err := conn.Read(buf)
 	if err != nil {
-		log.Println("error reading HTTP request: ", err)
+		log.Println("Error reading HTTP request: ", err)
 		return
 	}
 
@@ -43,20 +50,17 @@ func handleClient(conn net.Conn) {
 	req := string(buf[:n])
 	path := strings.Split(req, " ")[1]
 
-	// build headers map from request
+	// build headers map from request (ugly :( )
 	headersRaw := strings.Split(strings.SplitN(req, "\r\n", 2)[1], "\r\n\r\n")[0]
+
 	headers := make(map[string]string)
 	for _, h := range strings.Split(headersRaw, "\r\n") {
 		k, v, _ := strings.Cut(h, ": ")
 		headers[k] = v
 	}
 
-	// for k, v := range headers {
-	// 	fmt.Printf("%s:%s.\n", k, v)
-	// }
-
 	// handle URL target
-	status := "200 OK"
+	status := status_200_OK
 	body := ""
 	switch {
 	case path == "/":
@@ -68,11 +72,11 @@ func handleClient(conn net.Conn) {
 	case strings.HasPrefix(path, "/echo/"):
 		body = path[6:]
 	default:
-		status = "404 Not Found"
+		status = status_404_Not_Found
 	}
 
 	// write response
-	buf = []byte(fmt.Sprintf("HTTP/1.1 %s\r\n\r\n", status))
+	buf = []byte(fmt.Sprintf("%s %s\r\n\r\n", HTTP_version, status))
 
 	if body != "" {
 		buf = formatPlain(body)
@@ -80,17 +84,17 @@ func handleClient(conn net.Conn) {
 
 	_, err = conn.Write(buf)
 	if err != nil {
-		log.Println("Error writing to connection: ", err)
+		log.Println("Error writing response: ", err)
 		return
 	}
 }
 
-// writePlain writes a byte buffer with body as plain text.
+// writePlain returns a byte buffer with body as plain text.
 func formatPlain(body string) []byte {
-	statusLine := "HTTP/1.1 200 OK\r\n"
+	statusLine := fmt.Sprintf("%s %s\r\n", HTTP_version, status_200_OK)
 	headers := fmt.Sprintf(
 		"Content-Type: text/plain\r\nContent-Length: %v\r\n\r\n",
-		len([]byte(body)),
+		len(body),
 	)
 	return []byte(statusLine + headers + body)
 }
