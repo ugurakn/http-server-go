@@ -18,8 +18,10 @@ const (
 	status_500_Internal_Server_Error = "500 Internal Server Error"
 
 	// headers
-	contentType   = "Content-Type"
-	contentLength = "Content-Length"
+	acceptEncoding  = "Accept-Encoding"
+	contentEncoding = "Content-Encoding"
+	contentType     = "Content-Type"
+	contentLength   = "Content-Length"
 )
 
 func main() {
@@ -112,6 +114,12 @@ func handle(conn net.Conn) {
 		}
 	}
 
+	// encode body according to request header Accept-Encoding
+	if req.headers[acceptEncoding] == "gzip" {
+		res.headers[contentEncoding] = "gzip"
+		res.body = gzipBody(res.body)
+	}
+
 	// write response
 	wBuf := res.build()
 
@@ -120,4 +128,8 @@ func handle(conn net.Conn) {
 		log.Println("Error writing response: ", err)
 		return
 	}
+}
+
+func gzipBody(body []byte) []byte {
+	return body
 }
