@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
 	"fmt"
 	"log"
 	"net"
@@ -119,16 +121,20 @@ func handle(conn net.Conn) {
 		for _, enc := range strings.Split(encodings, ", ") {
 			if enc == "gzip" {
 				res.headers[contentEncoding] = "gzip"
-				res.body = gzipBody(res.body)
+				gzipped, err := gzipBody(res.body)
+				if err != nil {
+					// TODO handle error response properly
+					res.status = status_500_Internal_Server_Error
+					res.body = make([]byte, 0)
+					res.headers = make(map[string]string)
+					break
+				}
+				res.body = gzipped
+				res.headers[contentLength] = strconv.Itoa(len(res.body))
 				break
 			}
 		}
 	}
-
-	// if req.headers[acceptEncoding] == "gzip" {
-	// 	res.headers[contentEncoding] = "gzip"
-	// 	res.body = gzipBody(res.body)
-	// }
 
 	// build & write response
 	wBuf := res.build()
@@ -140,6 +146,24 @@ func handle(conn net.Conn) {
 	}
 }
 
-func gzipBody(body []byte) []byte {
-	return body
+func gzipBody(body []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	gzipWriter := gzip.NewWriter(&buf)
+
+	_, err := gzipWriter.Write(body)
+	if err != nil {
+		return nil, err
+	}
+	err = gzipWriter.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	gzipped := make([]byte, buf.Len())
+	_, err = buf.Read(gzipped)
+	if err != nil {
+		return nil, err
+	}
+
+	return gzipped, nil
 }
