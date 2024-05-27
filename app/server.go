@@ -114,13 +114,23 @@ func handle(conn net.Conn) {
 		}
 	}
 
-	// encode body according to request header Accept-Encoding
-	if req.headers[acceptEncoding] == "gzip" {
-		res.headers[contentEncoding] = "gzip"
-		res.body = gzipBody(res.body)
+	// encode body according to request header Accept-Encoding (multiple encodings)
+	if encodings, ok := req.headers[acceptEncoding]; ok {
+		for _, enc := range strings.Split(encodings, ", ") {
+			if enc == "gzip" {
+				res.headers[contentEncoding] = "gzip"
+				res.body = gzipBody(res.body)
+				break
+			}
+		}
 	}
 
-	// write response
+	// if req.headers[acceptEncoding] == "gzip" {
+	// 	res.headers[contentEncoding] = "gzip"
+	// 	res.body = gzipBody(res.body)
+	// }
+
+	// build & write response
 	wBuf := res.build()
 
 	_, err = conn.Write(wBuf)
