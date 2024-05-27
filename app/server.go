@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -15,6 +16,10 @@ const (
 	status_201_Created               = "201 Created"
 	status_404_Not_Found             = "404 Not Found"
 	status_500_Internal_Server_Error = "500 Internal Server Error"
+
+	// headers
+	contentType   = "Content-Type"
+	contentLength = "Content-Length"
 )
 
 func main() {
@@ -52,10 +57,8 @@ func handle(conn net.Conn) {
 	// parse request
 	req := parseRequest(buf[:n])
 
-	// handle URL target
-	status := status_200_OK
-	bodyStr := ""
-	bodyByt := make([]byte, 0)
+	// init response
+	res := newResponse()
 
 	switch req.method {
 	case "GET":
@@ -69,22 +72,31 @@ func handle(conn net.Conn) {
 			b, err := os.ReadFile(directory + filename)
 			if err != nil {
 				log.Printf("can't read %s%s: %v\n", directory, filename, err)
-				status = status_404_Not_Found
+				res.status = status_404_Not_Found
 				break
 			}
-			bodyByt = b
+			res.headers[contentType] = "application/octet-stream"
+			res.headers[contentLength] = strconv.Itoa(len(b))
+			res.body = b
 
 		case req.path == "/user-agent":
 			if ua, ok := req.headers["User-Agent"]; ok {
-				bodyStr = ua
+				body := []byte(ua)
+				res.headers[contentType] = "text/plain"
+				res.headers[contentLength] = strconv.Itoa(len(body))
+				res.body = body
 			}
 
 		case strings.HasPrefix(req.path, "/echo/"):
-			bodyStr = req.path[6:]
+			body := []byte(req.path[6:])
+			res.headers[contentType] = "text/plain"
+			res.headers[contentLength] = strconv.Itoa(len(body))
+			res.body = body
 
 		default:
-			status = status_404_Not_Found
+			res.status = status_404_Not_Found
 		}
+
 	case "POST":
 		switch {
 		case strings.HasPrefix(req.path, "/files/"):
@@ -93,45 +105,19 @@ func handle(conn net.Conn) {
 			err := os.WriteFile(directory+filename, []byte(req.body), 0644)
 			if err != nil {
 				log.Printf("can't write to %s%s: %v\n", directory, filename, err)
-				status = status_500_Internal_Server_Error
+				res.status = status_500_Internal_Server_Error
 				break
 			}
-			status = status_201_Created
+			res.status = status_201_Created
 		}
-
 	}
 
 	// write response
-	buf = []byte(fmt.Sprintf("%s %s\r\n\r\n", HTTP_version, status))
+	wBuf := res.build()
 
-	if bodyStr != "" {
-		buf = formatPlain(bodyStr)
-	} else if len(bodyByt) != 0 {
-		buf = formatOctet(bodyByt)
-	}
-
-	_, err = conn.Write(buf)
+	_, err = conn.Write(wBuf)
 	if err != nil {
 		log.Println("Error writing response: ", err)
 		return
 	}
-}
-
-// writePlain returns a byte buffer with body as plain text.
-func formatPlain(body string) []byte {
-	statusLine := fmt.Sprintf("%s %s\r\n", HTTP_version, status_200_OK)
-	headers := fmt.Sprintf(
-		"Content-Type: text/plain\r\nContent-Length: %v\r\n\r\n",
-		len(body),
-	)
-	return []byte(statusLine + headers + body)
-}
-
-func formatOctet(body []byte) []byte {
-	statusLine := fmt.Sprintf("%s %s\r\n", HTTP_version, status_200_OK)
-	headers := fmt.Sprintf(
-		"Content-Type: application/octet-stream\r\nContent-Length: %v\r\n\r\n",
-		len(body),
-	)
-	return append([]byte(statusLine+headers), body...)
 }
